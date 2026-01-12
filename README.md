@@ -172,9 +172,3 @@ claude_args: "--max-turns 30"  # More turns = deeper analysis
 ## 📜 License
 
 MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">
-  Built with ❤️ using <a href="https://github.com/anthropics/claude-code-action">Claude Code Action</a>
-</p>
