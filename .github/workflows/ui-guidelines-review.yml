@@ -46,19 +46,21 @@ jobs:
 
       - name: Fetch Vercel Web Interface Guidelines
         id: fetch-guidelines
+        continue-on-error: true
         run: |
           # Fetch the latest AGENTS.md from Vercel's repository
           # This ensures we always use the most up-to-date guidelines
           echo "Fetching latest Vercel Web Interface Guidelines..."
 
-          AGENTS_MD=$(curl -sSL "https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/AGENTS.md")
-          COMMAND_MD=$(curl -sSL "https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md")
-
-          # Save to temp files for the review step
-          echo "$AGENTS_MD" > /tmp/AGENTS.md
-          echo "$COMMAND_MD" > /tmp/command.md
-
-          echo "✅ Successfully fetched guidelines from vercel-labs/web-interface-guidelines"
+          # Use -f to fail on HTTP errors (404, 500, etc.)
+          # Write directly to file to avoid echo misinterpreting content starting with dashes
+          if curl -fsSL "https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/AGENTS.md" -o /tmp/AGENTS.md && \
+             curl -fsSL "https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md" -o /tmp/command.md; then
+            echo "✅ Successfully fetched guidelines from vercel-labs/web-interface-guidelines"
+          else
+            echo "⚠️ Failed to fetch guidelines - review will continue with cached or fallback behavior"
+            exit 1
+          fi
 
       - name: UI Guidelines Review
         id: ui-review
