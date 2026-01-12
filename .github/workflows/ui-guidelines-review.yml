@@ -1,0 +1,169 @@
+name: UI Guidelines Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      # Customize these paths to match your project structure
+      - "app/**"
+      - "src/**"
+      - "components/**"
+      - "lib/**"
+      - "pages/**"
+      - "*.tsx"
+      - "*.ts"
+      - "*.css"
+
+jobs:
+  ui-guidelines-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+        with:
+          files: |
+            **/*.tsx
+            **/*.ts
+            **/*.css
+          files_ignore: |
+            **/*.test.ts
+            **/*.test.tsx
+            **/*.spec.ts
+            **/*.spec.tsx
+            **/node_modules/**
+
+      - name: Fetch Vercel Web Interface Guidelines
+        id: fetch-guidelines
+        run: |
+          # Fetch the latest AGENTS.md from Vercel's repository
+          # This ensures we always use the most up-to-date guidelines
+          echo "Fetching latest Vercel Web Interface Guidelines..."
+
+          AGENTS_MD=$(curl -sSL "https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/AGENTS.md")
+          COMMAND_MD=$(curl -sSL "https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md")
+
+          # Save to temp files for the review step
+          echo "$AGENTS_MD" > /tmp/AGENTS.md
+          echo "$COMMAND_MD" > /tmp/command.md
+
+          echo "✅ Successfully fetched guidelines from vercel-labs/web-interface-guidelines"
+
+      - name: UI Guidelines Review
+        id: ui-review
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: anthropics/claude-code-action@v1
+        continue-on-error: true
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--max-turns 30"
+          prompt: |
+            You are a UI/UX code reviewer specializing in Vercel's Web Interface Guidelines.
+
+            ## Your Task
+
+            Review the changed frontend files in this PR for compliance with Vercel's Web Interface Guidelines.
+            Focus ONLY on UI/UX patterns, accessibility, performance, and interaction design.
+
+            ## Changed Files to Review
+
+            ${{ steps.changed-files.outputs.all_changed_files }}
+
+            ## Guidelines Reference
+
+            First, read the guidelines I've fetched for you:
+            - `/tmp/AGENTS.md` - Full guidelines with MUST/SHOULD/NEVER rules
+            - `/tmp/command.md` - Condensed review checklist with anti-patterns
+
+            You can also reference the live source at:
+            https://github.com/vercel-labs/web-interface-guidelines
+
+            ## Review Categories
+
+            Check each file against these categories from the guidelines:
+
+            1. **Accessibility** - ARIA labels, keyboard support, focus management, semantic HTML
+            2. **Forms** - Input types, autocomplete, validation, error handling
+            3. **Animation** - prefers-reduced-motion, compositor-friendly properties
+            4. **Performance** - Virtualization, image optimization, CLS prevention
+            5. **Navigation & State** - URL state sync, proper link elements
+            6. **Touch & Interaction** - Hit targets, touch-action, overscroll behavior
+            7. **Typography & Content** - Proper quotes, ellipsis, non-breaking spaces
+            8. **Dark Mode** - color-scheme, theme-color meta
+            9. **Hydration Safety** - Controlled vs uncontrolled inputs
+
+            ## Anti-patterns to Flag
+
+            - `user-scalable=no` or `maximum-scale=1`
+            - `onPaste` with `preventDefault`
+            - `transition: all`
+            - `outline-none` without focus-visible replacement
+            - `<div onClick>` for navigation
+            - Images without dimensions
+            - Form inputs without labels
+            - Icon buttons without `aria-label`
+            - Hardcoded date/number formats (should use `Intl.*`)
+
+            ## Output Instructions
+
+            1. If you find issues, post a **single detailed review comment** on the PR with:
+               - A summary of findings grouped by category
+               - Specific file:line references (clickable in GitHub)
+               - Suggested fixes where applicable
+               - Priority indicators (MUST fix vs SHOULD improve)
+
+            2. If all files pass the guidelines, post a brief approval comment.
+
+            3. Be constructive and educational - explain WHY each guideline matters.
+
+            4. Focus on actionable feedback. Don't nitpick style preferences outside the guidelines.
+
+            ## Format Example
+
+            ```
+            ## 🎨 UI Guidelines Review
+
+            ### Summary
+            Found 3 issues across 2 files. 1 accessibility concern (MUST fix), 2 improvements (SHOULD).
+
+            ### Accessibility (MUST)
+            - `components/Button.tsx:42` - Icon button missing `aria-label`
+              ```tsx
+              // Add aria-label for screen readers
+              <button aria-label="Close dialog">
+              ```
+
+            ### Animation (SHOULD)
+            - `components/Modal.tsx:18` - Missing `prefers-reduced-motion` check
+
+            ### ✅ Passing
+            - Form accessibility
+            - Keyboard navigation
+            - Image optimization
+            ```
+
+      - name: Post neutral status
+        if: always()
+        run: |
+          if [ "${{ steps.changed-files.outputs.any_changed }}" != "true" ]; then
+            echo "📋 No frontend files changed - skipping UI guidelines review"
+          elif [ "${{ steps.ui-review.outcome }}" == "success" ]; then
+            echo "✅ UI Guidelines review completed successfully"
+          else
+            echo "⚠️ UI Guidelines review completed (this check is advisory only)"
+            echo "Review feedback has been posted as PR comments"
+          fi
+          # Always exit 0 - this is a non-blocking advisory check
+          exit 0
